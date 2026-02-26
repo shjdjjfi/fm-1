@@ -14,16 +14,16 @@ While building the Docker image may take some time, as RustyKeY builds on an ext
 
 As such, the full tests are equivalent to the smoke test (a.k.a., "Kick-the-tires").
 
-Simply build the docker container using (you may need `sudo`, depending on your docker setup)
+Simply load the Docker image for your platform---we provide images for linux/amd64 and linux/arm64. For linux/amd64, the command is (you may need `sudo`, depending on your docker setup):
+```bash
+docker load < rustyDL-linux-amd64.tar.gz
+```
+
+Alternatively, if your system has no provided image, build the Docker container using
 ```bash
 docker build . -t derdrodt/fm26
 ```
 **(Note that the name is fixed. If you use another name for the image, you must also change the name in `run_all_tests.sh`!)**
-
-Alternatively, on AMD64 you can pull the Docker image with
-```bash
-docker pull derdrodt/fm26
-```
 
 And then execute all tests using (possibly with `sudo` again):
 ```bash

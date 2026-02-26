@@ -30,10 +30,10 @@ docker run -it --name example9 derdrodt/fm26 java -jar rusty-key-0.1.0-exe.jar -
 docker cp example9:/home/fm26/example9.proof proofs/
 docker rm -f example9
 echo ""
-echo "=== Example 11"
-docker run -it --name example11 derdrodt/fm26 java -jar rusty-key-0.1.0-exe.jar -s -o example11.proof -m 12000 examples/paper/example11.key
-docker cp example11:/home/fm26/example11.proof proofs/
-docker rm -f example11
+echo "=== Example 10"
+docker run -it --name example10 derdrodt/fm26 java -jar rusty-key-0.1.0-exe.jar -s -o example10.proof -m 12000 examples/paper/example10.key
+docker cp example10:/home/fm26/example10.proof proofs/
+docker rm -f example10
 echo ""
 echo "== Running Binary Search ="
 docker run -it --name bin-search derdrodt/fm26 java -jar rusty-key-0.1.0-exe.jar -s -o binary-search.proof examples/binary-search/binary-search.key
