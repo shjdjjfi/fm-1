@@ -140,3 +140,34 @@ The current prototype replays RustyKeY textual sequents rather than deserializin
 KeY's internal term graph. Complex arithmetic side conditions are checked by a
 simple structural checker; richer arithmetic replay can be added by plugging in an
 SMT backend without changing the certificate format.
+
+## Checker granularity and conservative replay
+
+The implemented checker is intentionally small, so its replay relation is stratified:
+
+1. **Precise replay** covers certificate integrity, rule identity, parent ordering,
+   current-branch sequencing, substitution well-formedness, explicit closure side
+   conditions, and digest checks.
+2. **Schema-level textual replay** covers RustyDL source/update rules whose proof
+   traces include textual sequents. The checker validates that the known schema is
+   applied to the current textual goal and that the resulting goal is chained.
+3. **Conservative trace-shape replay** covers RustyKeY-generated traces that omit
+   textual sequents. For these traces the checker uses stable opaque sequents and
+   validates known rule families, branch/closure structure, step ids, and digests.
+4. **Arithmetic replay** is currently a small built-in side-condition backend over
+   known arithmetic simplification rule families. A future SMT backend could refine
+   this layer without changing the certificate language.
+
+This stratification is part of the trusted-boundary claim: RustyDL-Cert reduces the
+trusted base by replacing proof search and taclet execution with an independently
+checked certificate, but it does not claim to machine-check the full KeY term graph
+for every generated rule in the current prototype.
+
+## Compression status
+
+Compression uses two mechanisms. Small proofs with textual sequents use dictionary
+sharing plus deterministic simplification macro steps. Large RustyKeY-generated
+proofs use a compact `trace_shape_block`, which avoids repeating opaque/current
+sequents and branch strings thousands of times. This makes the large benchmark
+certificates smaller while keeping the compressed checker honest about the more
+conservative replay granularity.

@@ -45,3 +45,16 @@ Benchmark output is written to:
 If the local environment lacks the Rust compiler wrapper needed by RustyKeY, some
 `.key` benchmarks may fail during proof production. Existing `.proof` artifacts
 still exercise the certificate recorder, checker, and compressor.
+
+## Negative-test results
+
+`make cert-benchmarks` also writes:
+
+* `results/cert_negative_tests.csv`
+* `results/cert_negative_tests.md`
+
+These rows are produced by actually corrupting certificates and running the
+checker. Expected artifact cases include corrupted rule ids, corrupted
+substitutions, missing side conditions, wrong initial sequents, wrong branch
+closure evidence, and corrupted compressed macro steps. All should report
+`passed=True` with `actual=reject`.

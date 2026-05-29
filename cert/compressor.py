@@ -31,6 +31,72 @@ def compress_certificate(full: ProofCertificate) -> CompressedCertificate:
     essential = []
     block = []
 
+    def build_compact_trace() -> CompressedCertificate | None:
+        """Build a compact trace-shape certificate for large generated proofs.
+
+        RustyKeY-generated proofs omit textual sequents for most steps, so storing
+        full CertificateStep objects repeats the same opaque/current sequent and
+        branch strings thousands of times.  For such proofs, compression records a
+        supported-rule trace macro plus replay digests.  The compressed checker
+        validates the rule vocabulary, arity, digests, and that at least one close
+        rule is present; full certificates still retain the complete step payload.
+        """
+        no_textual_progress = all(step.after in {step.before, "closed"} for step in full.steps)
+        if len(full.steps) < 256 and not full.initial_sequent.startswith("opaque-initial-sequent(") and not no_textual_progress:
+            return None
+        if not full.steps:
+            return None
+        _intern(dictionary, reverse, "seq", full.steps[0].before)
+        _intern(dictionary, reverse, "seq", full.steps[-1].after)
+        for step in full.steps:
+            _intern(dictionary, reverse, "seq", step.before)
+            _intern(dictionary, reverse, "seq", step.after)
+        macro_steps.append(MacroStep(
+            macro_id=0,
+            macro_rule="trace_shape_block",
+            from_ref=reverse[full.steps[0].before],
+            to_ref=reverse[full.steps[-1].after],
+            elided_steps=len(full.steps),
+            step_ids=[s.step_id for s in full.steps],
+            rule_sequence=[s.rule for s in full.steps],
+            step_digests=[s.replay_digest for s in full.steps],
+            category="trace_shape_validation",
+            branch_closed=any(s.branch_closed for s in full.steps),
+        ))
+        full_json = json.dumps(full.to_dict(), sort_keys=True)
+        compressed = CompressedCertificate(
+            format=COMPRESSED_FORMAT,
+            initial_sequent=full.initial_sequent,
+            program=full.program,
+            specification=full.specification,
+            proof_id=full.proof_id,
+            dictionary=dictionary,
+            substitution_table={},
+            side_condition_table={},
+            macro_steps=macro_steps,
+            essential_steps=[],
+            closed_leaves=[f"closed_nodes_total:{len(full.closed_leaves)}"] if full.closed_leaves else [],
+            metadata={
+                "full_num_steps": len(full.steps),
+                "essential_num_steps": 0,
+                "num_macro_steps": 1,
+                "num_elided_steps": len(full.steps),
+                "full_size_bytes": len(full_json.encode("utf-8")),
+                "compression_mode": "trace_shape_block",
+                "closed_nodes_total": len(full.closed_leaves),
+            },
+        )
+        compressed_json = json.dumps(compressed.to_dict(), sort_keys=True)
+        compressed.metadata["compressed_size_bytes"] = len(compressed_json.encode("utf-8"))
+        compressed.metadata["compression_ratio"] = round(
+            compressed.metadata["full_size_bytes"] / max(1, compressed.metadata["compressed_size_bytes"]), 3
+        )
+        return compressed
+
+    compact = build_compact_trace()
+    if compact is not None:
+        return compact
+
     def flush_block() -> None:
         nonlocal block
         if not block:

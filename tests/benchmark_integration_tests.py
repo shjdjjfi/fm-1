@@ -12,7 +12,8 @@ EXPECTED = {
     'example7-and-8', 'example9', 'example10', 'binary-search',
 }
 REQUIRED_FIELDS = [
-    'num_rule_steps', 'num_branches', 'num_closed_leaves', 'full_cert_size_kb',
+    'num_rule_steps', 'num_branching_steps', 'num_branches', 'num_final_open_goals',
+    'num_final_closed_goals', 'num_closed_nodes_total', 'full_cert_size_kb',
     'compressed_cert_size_kb', 'compression_ratio', 'checker_time_ms',
     'compressed_checker_time_ms', 'trusted_checker_loc',
 ]

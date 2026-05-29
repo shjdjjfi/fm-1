@@ -1,0 +1,8 @@
+| negative_case | expected | actual | passed | checker_error |
+|---|---|---|---|---|
+| corrupted_rule_id | reject | reject | True | UnsupportedRule: UNSUPPORTED_RULE at step 0 |
+| corrupted_substitution | reject | reject | True | ReplayDigestMismatch at step 0 |
+| missing_side_condition | reject | reject | True | MalformedSideCondition at step 19 |
+| wrong_initial_sequent | reject | reject | True | InitialSequentMismatch: certificate initial sequent differs from supplied initial sequent |
+| wrong_branch_closure | reject | reject | True | InvalidBranchClosingCondition at step 19 |
+| corrupted_compressed_macro_step | reject | reject | True | NonDeterministicRuleInSimplificationMacro: assignment_update |

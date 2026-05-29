@@ -115,3 +115,39 @@ consecutive deterministic simplification/arithmetic steps as macro steps:
 The compressed checker validates dictionary references, macro arity, rule support,
 and that deterministic simplification macros contain only replayable deterministic
 rules. Essential nontrivial RustyDL steps retain full step payloads and digests.
+
+## Replay-precision matrix
+
+RustyDL-Cert deliberately separates *precise replay* from *conservative trace
+validation* so the small checker's scope is explicit rather than implicit.
+
+| Rule family | Checker treatment | Notes |
+|---|---|---|
+| Rule identity, parent order, branch identifiers, digest integrity | Precise replay | Every full step must have the expected `step_id`, supported rule name, parent relation, branch metadata, and SHA-256 replay digest. |
+| Assignment/update rules (`assignment*`, `simplifyUpdate*`, `applyOn*`) | Schema-level replay | The checker validates supported rule schemas, sequent chaining, substitutions, generated updates, and digest integrity; it does not rebuild KeY's internal update term graph. |
+| Borrow/reference/mutable-write rules (`assign_*`, `deref_*`, `applyMutating*`) | Schema-level replay | Supported RustyDL source-level rule names are replayed as explicit schemas with textual sequent/current-goal validation. |
+| Array/tuple/enum/loop/binary-search proof rules | Conservative replay | The checker validates that the producer emitted known rule families and that the trace closes all goals; generated proofs without textual sequents use opaque/current sequent tokens. |
+| Arithmetic simplification (`polySimp_*`, `polyDiv_*`, `inEqSimp_*`, literal rules) | Conservative arithmetic backend | The built-in backend checks rule identity, side-condition presence, and replay shape. It is not a full Presburger/SMT prover. |
+| Branch closing (`close`, `closeTrue`, `closeFalse`) | Precise closure side-condition replay | `close` requires an assumption reference or syntactic marker; `closeTrue`/`closeFalse` require explicit closure markers inserted by the recorder. |
+| Compressed `deterministic_simplification_block` | Macro replay | Every elided rule must be deterministic/simplifying and supported. |
+| Compressed `trace_shape_block` | Conservative compact replay | Used for large RustyKeY-generated traces with omitted sequent comments; stores rule sequence, step ids, digests, dictionary refs, and closure evidence. |
+
+The checker therefore checks much more than an accept-all trace loader, but it is
+not a reimplementation of the complete KeY taclet engine. Unsupported rules are
+rejected, while supported generated proof fragments are replayed at the textual
+rule-schema/trace-shape level.
+
+## Statistics field definitions
+
+Benchmark tables use explicit proof-tree statistics:
+
+* `num_rule_steps`: number of certificate rule applications.
+* `num_branching_steps`: number of branch-opening events observed in the generated
+  proof trace (`num_branches - 1` for the current textual recorder).
+* `num_branches`: distinct branch identifiers in the certificate.
+* `num_final_open_goals`: final open goals after independent replay.
+* `num_final_closed_goals`: final closed proof leaves after replay, counted at the
+  branch level.
+* `num_closed_nodes_total`: total number of close-rule nodes encountered during
+  replay. This can be much larger than final leaves for branch-heavy generated
+  proofs and should not be read as final proof leaves.

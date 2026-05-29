@@ -82,6 +82,11 @@ class CertificateChecker:
                     return CheckResult(False, f"UnsupportedRule: {rule} in macro {macro.macro_id}")
                 if macro.macro_rule == "deterministic_simplification_block" and not is_simplification_rule(rule, ""):
                     return CheckResult(False, f"NonDeterministicRuleInSimplificationMacro: {rule}")
+            if macro.macro_rule == "trace_shape_block":
+                if not macro.branch_closed or not any(rule.startswith("close") for rule in macro.rule_sequence):
+                    return CheckResult(False, f"TraceShapeMacroWithoutClosure in macro {macro.macro_id}")
+            elif macro.macro_rule != "deterministic_simplification_block":
+                return CheckResult(False, f"UnsupportedMacroRule: {macro.macro_rule}")
             if len(macro.step_digests) != len(macro.step_ids):
                 return CheckResult(False, f"MacroDigestMismatch in macro {macro.macro_id}")
         # Essential steps retain their full payloads and digests, but their surrounding

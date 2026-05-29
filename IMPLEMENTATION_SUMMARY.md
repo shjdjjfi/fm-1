@@ -112,6 +112,18 @@ and I/O code, and the independent checker under `checker/`. RustyKeY proof searc
 KeY taclet execution, simplification, and Rust HIR extraction are certificate
 producers and are not called by the checker.
 
+The checker is small by design, so its scope is documented explicitly: it performs
+precise replay for trace integrity, branch state, explicit closure evidence,
+substitution well-formedness, and digests; schema-level textual replay for proof
+steps with sequents; conservative trace-shape replay for generated proof steps
+without textual sequents; and conservative arithmetic side-condition replay for
+known simplification rule families. Unsupported rules remain rejected.
+
+Benchmark statistics now distinguish final proof leaves from close-rule events:
+`num_final_open_goals`, `num_final_closed_goals`, and `num_closed_nodes_total` are
+reported separately. Negative-test CSV/Markdown tables are generated to show the
+checker rejects corrupted certificates rather than rubber-stamping traces.
+
 ## Next extensions
 
 Future work can add a typed RustyDL term parser for exact internal sequent replay,

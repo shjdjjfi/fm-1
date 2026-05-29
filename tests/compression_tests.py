@@ -24,5 +24,14 @@ class CompressionTests(unittest.TestCase):
         result = CertificateChecker().check_compressed_certificate(bad)
         self.assertFalse(result.accepted)
 
+    def test_large_generated_trace_uses_compact_macro(self):
+        cert = certificate_from_proof(ROOT / 'results/generated/example1.proof') if (ROOT / 'results/generated/example1.proof').exists() else None
+        if cert is None:
+            self.skipTest('generated example1 proof not available')
+        compressed = compress_certificate(cert)
+        self.assertEqual(compressed.metadata.get('compression_mode'), 'trace_shape_block')
+        result = CertificateChecker().check_compressed_certificate(compressed)
+        self.assertTrue(result.accepted, result.error)
+
 if __name__ == '__main__':
     unittest.main()
