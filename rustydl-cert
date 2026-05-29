@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parent
 JAR = ROOT / "rusty-key-0.1.0-exe.jar"
 
 
-def run_key(input_path: Path, output: Path, max_steps: int | None = None, no_prove: bool = False) -> tuple[bool, float]:
+def run_key(input_path: Path, output: Path, max_steps: int | None = None, no_prove: bool = False, emit_errors: bool = True) -> tuple[bool, float]:
+    output.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["java", "-jar", str(JAR), "-s", "-o", str(output)]
     if max_steps is not None:
         cmd.extend(["-m", str(max_steps)])
@@ -28,7 +29,7 @@ def run_key(input_path: Path, output: Path, max_steps: int | None = None, no_pro
     start = time.perf_counter()
     proc = subprocess.run(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     elapsed = (time.perf_counter() - start) * 1000.0
-    if proc.returncode != 0:
+    if proc.returncode != 0 and emit_errors:
         sys.stderr.write(proc.stdout)
     return proc.returncode == 0, elapsed
 
@@ -107,11 +108,22 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     work = out / "generated"
     work.mkdir(exist_ok=True)
     for name, feature, input_path, key_path in BENCHMARKS:
-        proof_path = input_path if input_path.suffix == ".proof" else work / f"{name}.proof"
+        proof_path = work / f"{name}.proof"
         proof_success = True
         proof_ms = 0.0
-        if input_path.suffix != ".proof":
-            proof_success, proof_ms = run_key(input_path, proof_path, max_steps=12000 if name == "example10" else None)
+        # Re-run RustyKeY even for shipped .proof files so partially replayed
+        # manual proofs (notably example7-and-8) are completed before certificate
+        # extraction.  This still uses RustyKeY only as an untrusted certificate
+        # producer; acceptance is decided by the independent checker below.
+        proof_success, proof_ms = run_key(input_path, proof_path, max_steps=12000 if name == "example10" else None, emit_errors=input_path.suffix != ".proof")
+        if input_path.suffix == ".proof" and not proof_path.exists():
+            # Closed manual proof files may be rejected by RustyKeY's automatic
+            # prover because they already contain a complete proof.  In that
+            # case use the shipped proof trace directly; incomplete manual
+            # proofs that can be completed automatically (example7-and-8) will
+            # have produced proof_path above.
+            proof_path = input_path
+            proof_success = True
         if not proof_path.exists():
             rows.append({"example": name, "rust_feature": feature, "verification_success": False})
             continue

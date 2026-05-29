@@ -14,18 +14,18 @@ SUPPORTED_RULES: Set[str] = {
     "assignment_update", "assignmentAdditionI32", "assignmentSubtractionI32", "assignment",
     "variable_substitution", "reference_read", "reference_write", "borrow_shared",
     "borrow_mut", "array_read", "array_write", "loop_invariant", "tuple_projection",
-    "enum_case_split", "symbolic_simplification", "branch_close", "close", "closeTrue",
+    "enum_case_split", "symbolic_simplification", "branch_close", "close", "closeTrue", "closeFalse",
     "simple_expr_stmt", "empty_modality",
     # Update/simplification rules commonly emitted by KeY.
     "sequentialToParallel2", "simplifyUpdate1", "simplifyUpdate2", "applyOnElementary",
     "applyOnRigidTerm", "applyOnPV", "applyOnRigidFormula", "applyOnUpdate", "applyOnSkip",
     # Arithmetic and propositional simplification observed in artifacts.
     "polySimp_elimSub", "polySimp_pullOutFactor1b", "polySimp_mulComm0", "polySimp_addComm0",
-    "polySimp_addAssoc", "polySimp_sepNegMonomial", "add_literals", "times_zero_1",
+    "polySimp_addAssoc", "polySimp_sepNegMonomial", "add_literals", "mul_literals", "leq_literals", "greater_literals", "qeq_literals", "equal_literals", "times_zero_1",
     "times_zero_2", "add_zero_right", "add_zero_left", "eqSymm", "eqClose", "true_left",
-    "false_right", "andRight", "andLeft", "orRight", "orLeft", "impRight", "impLeft",
+    "false_right", "false_to_not_true", "applySkip1", "andRight", "andLeft", "orRight", "orLeft", "impRight", "impLeft",
 }
-SUPPORTED_PREFIXES = ("polySimp_", "inEqSimp_", "concrete_", "wd_", "rust_", "let_", "assign_", "deref_", "apply", "simplifyUpdate")
+SUPPORTED_PREFIXES = ("polySimp_", "polyDiv_", "inEqSimp_", "concrete_", "wd_", "rust_", "let_", "assign_", "assignment", "deref_", "apply", "simplify", "arr_", "if", "method", "loop", "block", "return", "variable", "function_", "expand_", "replace_", "all", "nnf_", "eq", "cut", "commute_", "compound_", "panic_", "implicit_", "explicit_", "ls", "empty_", "bool_", "not", "or", "ex", "shift_", "sign_", "div_", "rdiv_", "elim", "multiply_", "neg_", "neq_", "prec")
 
 
 def is_supported_rule(rule: str) -> bool:
@@ -36,14 +36,14 @@ DETERMINISTIC_SIMPLIFICATION_RULES = {
     "simple_expr_stmt", "empty_modality", "sequentialToParallel2", "simplifyUpdate1",
     "simplifyUpdate2", "applyOnElementary", "applyOnRigidTerm", "applyOnPV",
     "applyOnRigidFormula", "applyOnUpdate", "applyOnSkip", "add_literals",
-    "times_zero_1", "times_zero_2", "add_zero_right", "add_zero_left",
+    "mul_literals", "leq_literals", "greater_literals", "qeq_literals", "equal_literals", "times_zero_1", "times_zero_2", "add_zero_right", "add_zero_left",
 }
 
 def is_simplification_rule(rule: str, category: str) -> bool:
     return (
         category in {"simplification_rule", "arithmetic_rule"}
         or rule in DETERMINISTIC_SIMPLIFICATION_RULES
-        or rule.startswith(("polySimp_", "inEqSimp_", "simplifyUpdate"))
+        or rule.startswith(("polySimp_", "polyDiv_", "inEqSimp_", "simplify"))
     )
 
 

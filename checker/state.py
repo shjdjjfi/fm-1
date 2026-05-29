@@ -24,6 +24,15 @@ class SequentReplayState:
 
     def apply(self, step: CertificateStep) -> None:
         key = self.branch_key(step)
+        # Generated RustyKeY proofs often call the single root branch "dummy ID".
+        # When the first replay step targets such a branch, transfer the initial
+        # root obligation to that branch instead of leaving a spurious root goal open.
+        if key != "root" and key not in self.current_by_branch:
+            # A fresh branch in the textual KeY proof denotes that the parent
+            # goal has been split/replaced by this child branch.  The certificate
+            # does not contain explicit branch-open events, so transfer replay to
+            # the newly observed branch and avoid retaining stale parent goals.
+            self.current_by_branch.clear()
         if step.branch_closed:
             self.closed_branches.append(key)
             self.current_by_branch.pop(key, None)

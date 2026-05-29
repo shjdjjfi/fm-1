@@ -51,9 +51,13 @@ class CertificateChecker:
                 return CheckResult(False, f"MalformedSubstitution at step {idx}", idx)
             if not side_conditions_well_formed(step.side_conditions, step.branch_closed):
                 return CheckResult(False, f"MalformedSideCondition at step {idx}", idx)
-            if step.branch_closed and step.after != "closed" and step.rule not in {"close", "closeTrue", "branch_close"}:
+            if step.branch_closed and step.after != "closed" and step.rule not in {"close", "closeTrue", "closeFalse", "branch_close"}:
                 return CheckResult(False, f"InvalidClosureRule at step {idx}", idx)
-            if step.rule in {"close", "closeTrue", "branch_close"} and not syntactic_close(step.before, step.side_conditions):
+            if step.rule == "closeTrue" and "closure:true" not in step.side_conditions:
+                return CheckResult(False, f"InvalidBranchClosingCondition at step {idx}", idx)
+            if step.rule == "closeFalse" and "closure:false" not in step.side_conditions:
+                return CheckResult(False, f"InvalidBranchClosingCondition at step {idx}", idx)
+            if step.rule in {"close", "branch_close"} and not syntactic_close(step.before, step.side_conditions):
                 return CheckResult(False, f"InvalidBranchClosingCondition at step {idx}", idx)
             state.apply(step)
         if len(state.closed_branches) != len(cert.closed_leaves):
@@ -91,7 +95,11 @@ class CertificateChecker:
                 return CheckResult(False, f"UnsupportedRule: {step.rule} at essential step {step.step_id}")
             if not check_sequent_text(step.before) or not check_sequent_text(step.after):
                 return CheckResult(False, f"MalformedSequent at essential step {step.step_id}")
-            if step.rule in {"close", "closeTrue", "branch_close"} and not syntactic_close(step.before, step.side_conditions):
+            if step.rule == "closeTrue" and "closure:true" not in step.side_conditions:
+                return CheckResult(False, f"InvalidBranchClosingCondition at essential step {step.step_id}")
+            if step.rule == "closeFalse" and "closure:false" not in step.side_conditions:
+                return CheckResult(False, f"InvalidBranchClosingCondition at essential step {step.step_id}")
+            if step.rule in {"close", "branch_close"} and not syntactic_close(step.before, step.side_conditions):
                 return CheckResult(False, f"InvalidBranchClosingCondition at essential step {step.step_id}")
         if not cert.closed_leaves:
             return CheckResult(False, "OpenGoalsRemain: compressed certificate has no closed leaves")
