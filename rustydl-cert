@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""RustyDL-Cert command line interface."""
+from __future__ import annotations
+import argparse
+import csv
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from cert.compressor import compress_certificate
+from cert.io import read_certificate, read_compressed_certificate, write_certificate
+from cert.recorder import certificate_from_proof
+from cert.stats import file_size_kb, trusted_checker_loc
+from checker.checker import CertificateChecker
+
+ROOT = Path(__file__).resolve().parent
+JAR = ROOT / "rusty-key-0.1.0-exe.jar"
+
+
+def run_key(input_path: Path, output: Path, max_steps: int | None = None, no_prove: bool = False) -> tuple[bool, float]:
+    cmd = ["java", "-jar", str(JAR), "-s", "-o", str(output)]
+    if max_steps is not None:
+        cmd.extend(["-m", str(max_steps)])
+    if no_prove:
+        cmd.append("--no-prove")
+    cmd.append(str(input_path))
+    start = time.perf_counter()
+    proc = subprocess.run(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    elapsed = (time.perf_counter() - start) * 1000.0
+    if proc.returncode != 0:
+        sys.stderr.write(proc.stdout)
+    return proc.returncode == 0, elapsed
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    source = Path(args.input)
+    cert_out = Path(args.emit_cert)
+    proof_out = Path(args.proof_out or cert_out.with_suffix(".proof"))
+    key_path = Path(args.spec) if args.spec else (source if source.suffix in {".key", ".proof"} else None)
+    proof_input = key_path if key_path else source
+    if source.suffix == ".proof":
+        proof_out = source
+        success, proof_ms = True, 0.0
+    else:
+        success, proof_ms = run_key(proof_input, proof_out, max_steps=args.max_steps)
+    cert = certificate_from_proof(proof_out, key_path if key_path and key_path.suffix == ".key" else None)
+    cert.metadata.proof_time_ms = round(proof_ms, 3)  # best-effort extension field
+    cert.metadata.verification_success = success
+    write_certificate(cert, cert_out)
+    print(f"verification_success={success}")
+    print(f"full_certificate={cert_out}")
+    return 0 if success else 1
+
+
+def cmd_from_proof(args: argparse.Namespace) -> int:
+    cert = certificate_from_proof(Path(args.proof), Path(args.key) if args.key else None)
+    write_certificate(cert, Path(args.out))
+    print(Path(args.out))
+    return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    cert = read_certificate(Path(args.certificate))
+    result = CertificateChecker().check_certificate(cert, args.initial_sequent)
+    print("accepted" if result.accepted else f"rejected: {result.error}")
+    print(f"checked_steps={result.checked_steps}")
+    print(f"closed_leaves={result.closed_leaves}")
+    return result.exit_code()
+
+
+def cmd_compress(args: argparse.Namespace) -> int:
+    cert = read_certificate(Path(args.certificate))
+    compressed = compress_certificate(cert)
+    write_certificate(compressed, Path(args.out))
+    print(Path(args.out))
+    print(f"compression_ratio={compressed.metadata['compression_ratio']}")
+    return 0
+
+
+def cmd_check_compressed(args: argparse.Namespace) -> int:
+    cert = read_compressed_certificate(Path(args.certificate))
+    result = CertificateChecker().check_compressed_certificate(cert, args.initial_sequent)
+    print("accepted" if result.accepted else f"rejected: {result.error}")
+    print(f"checked_steps={result.checked_steps}")
+    return result.exit_code()
+
+
+BENCHMARKS = [
+    ("example5", "primitive/assignment", ROOT / "examples/paper/example5.proof", None),
+    ("example6", "borrowing", ROOT / "examples/paper/example6.proof", None),
+    ("example7-and-8", "mutable-reference/tuple", ROOT / "examples/paper/example7-and-8.proof", None),
+    ("example1", "loop-invariant", ROOT / "examples/paper/example1.key", ROOT / "examples/paper/example1.key"),
+    ("example2", "array", ROOT / "examples/paper/example2.key", ROOT / "examples/paper/example2.key"),
+    ("example3", "enum", ROOT / "examples/paper/example3.key", ROOT / "examples/paper/example3.key"),
+    ("example9", "arithmetic", ROOT / "examples/paper/example9.key", ROOT / "examples/paper/example9.key"),
+    ("example10", "loop/binary-style", ROOT / "examples/paper/example10.key", ROOT / "examples/paper/example10.key"),
+    ("binary-search", "binary-search", ROOT / "examples/binary-search/binary-search.key", ROOT / "examples/binary-search/binary-search.key"),
+]
+
+
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    rows = []
+    checker = CertificateChecker()
+    work = out / "generated"
+    work.mkdir(exist_ok=True)
+    for name, feature, input_path, key_path in BENCHMARKS:
+        proof_path = input_path if input_path.suffix == ".proof" else work / f"{name}.proof"
+        proof_success = True
+        proof_ms = 0.0
+        if input_path.suffix != ".proof":
+            proof_success, proof_ms = run_key(input_path, proof_path, max_steps=12000 if name == "example10" else None)
+        if not proof_path.exists():
+            rows.append({"example": name, "rust_feature": feature, "verification_success": False})
+            continue
+        cert = certificate_from_proof(proof_path, key_path)
+        full_path = work / f"{name}.full.json"
+        comp_path = work / f"{name}.compressed.json"
+        write_certificate(cert, full_path)
+        t0 = time.perf_counter(); check = checker.check_certificate(cert); check_ms = (time.perf_counter() - t0) * 1000.0
+        compressed = compress_certificate(cert)
+        write_certificate(compressed, comp_path)
+        t1 = time.perf_counter(); ccheck = checker.check_compressed_certificate(compressed); ccheck_ms = (time.perf_counter() - t1) * 1000.0
+        rows.append({
+            "example": name,
+            "rust_feature": feature,
+            "verification_success": proof_success and check.accepted,
+            "num_rule_steps": len(cert.steps),
+            "num_branches": cert.metadata.num_branches,
+            "num_closed_leaves": cert.metadata.num_closed_leaves,
+            "full_cert_size_kb": file_size_kb(full_path),
+            "compressed_cert_size_kb": file_size_kb(comp_path),
+            "compression_ratio": compressed.metadata.get("compression_ratio", 0),
+            "proof_time_ms": round(proof_ms, 3),
+            "checker_time_ms": round(check_ms, 3),
+            "compressed_checker_time_ms": round(ccheck_ms, 3),
+            "trusted_checker_loc": trusted_checker_loc(),
+        })
+    fields = ["example","rust_feature","verification_success","num_rule_steps","num_branches","num_closed_leaves","full_cert_size_kb","compressed_cert_size_kb","compression_ratio","proof_time_ms","checker_time_ms","compressed_checker_time_ms","trusted_checker_loc"]
+    with (out / "cert_benchmark.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader(); w.writerows(rows)
+    with (out / "cert_benchmark.md").open("w", encoding="utf-8") as f:
+        f.write("| " + " | ".join(fields) + " |\n")
+        f.write("|" + "|".join(["---"] * len(fields)) + "|\n")
+        for row in rows:
+            f.write("| " + " | ".join(str(row.get(field, "")) for field in fields) + " |\n")
+    print(out / "cert_benchmark.csv")
+    print(out / "cert_benchmark.md")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="RustyDL-Cert certificate-carrying verification CLI")
+    sub = parser.add_subparsers(required=True)
+    p = sub.add_parser("verify", help="run RustyKeY and emit a full certificate")
+    p.add_argument("input"); p.add_argument("--spec"); p.add_argument("--emit-cert", required=True); p.add_argument("--proof-out"); p.add_argument("-m", "--max-steps", type=int)
+    p.set_defaults(func=cmd_verify)
+    p = sub.add_parser("from-proof", help="emit a certificate from an existing .proof file")
+    p.add_argument("proof"); p.add_argument("--key"); p.add_argument("--out", required=True); p.set_defaults(func=cmd_from_proof)
+    p = sub.add_parser("check", help="check a full certificate")
+    p.add_argument("certificate"); p.add_argument("--initial-sequent"); p.set_defaults(func=cmd_check)
+    p = sub.add_parser("compress", help="compress a certificate")
+    p.add_argument("certificate"); p.add_argument("--out", required=True); p.set_defaults(func=cmd_compress)
+    p = sub.add_parser("check-compressed", help="check a compressed certificate")
+    p.add_argument("certificate"); p.add_argument("--initial-sequent"); p.set_defaults(func=cmd_check_compressed)
+    p = sub.add_parser("benchmark", help="run certificate benchmarks")
+    p.add_argument("--out", default="results"); p.set_defaults(func=cmd_benchmark)
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    return args.func(args)
+
+if __name__ == "__main__":
+    raise SystemExit(main())

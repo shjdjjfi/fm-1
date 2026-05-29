@@ -92,3 +92,131 @@ Then, you can execute RustyKeY from the Jar file, using:
 java -jar rusty-key-0.1.0-exe.jar --help
 ```
 which will print the arguments and options expected by the CLI.
+
+## RustyDL-Cert: Certificate-Carrying Verification
+
+RustyDL-Cert is a research extension for certificate-carrying source-level
+verification of Rust programs in RustyDL/RustyKeY.
+
+This extension does not aim to outperform existing Rust verifiers in automation.
+Instead, it reduces the trusted base of source-level Rust verification by making
+RustyDL proofs independently checkable.
+
+RustyDL-Cert is not a new Rust verifier and does not aim to improve proof
+automation. Instead, it turns source-level RustyDL proofs into independently
+checkable proof certificates. The key contribution is a replayable certificate
+language, a small trusted checker, and a compression-preserving replay mechanism
+that reduces the trusted computing base of Rust source-level deductive
+verification.
+
+### Motivation and pipeline
+
+The original artifact uses RustyKeY proof search and KeY taclet/rule execution to
+prove RustyDL sequents. RustyDL-Cert treats that large engine as an untrusted
+certificate producer:
+
+```text
+Rust program + RustyDL specification
+        ↓
+RustyDL / RustyKeY proof search or replay
+        ↓
+full proof certificate JSON
+        ↓
+certificate compression
+        ↓
+small independent checker
+        ↓
+accepted / rejected + statistics
+```
+
+Because the distributed RustyKeY implementation is provided as a JAR, the current
+recorder is intentionally non-invasive: it parses the readable `.proof` files
+emitted by RustyKeY and records each `(rule ...) // sequent` application as a
+certificate step.
+
+### Trusted computing base
+
+The checker does **not** call the RustyKeY proof engine. The trusted code is the
+small Python checker under `checker/`, the certificate JSON reader, the textual
+rule-schema whitelist, and the simple side-condition/substitution checks. RustyKeY
+proof search, taclet execution, simplification, and Rust HIR conversion are treated
+as untrusted certificate producers.
+
+Current replay precision:
+
+* exact replay of rule identifiers, parent/child step identifiers, textual
+  before/after sequents, side-condition attributes, substitutions present in the
+  proof trace, branch closure flags, and replay digests;
+* conservative replay of RustyKeY textual sequent shape rather than full internal
+  KeY term graphs;
+* unsupported rules are rejected with `UnsupportedRule`, not silently accepted;
+* complex arithmetic/SMT side conditions are represented as replayable side
+  conditions with a simple built-in checker; richer SMT-backed checking is future
+  work.
+
+### Commands
+
+Generate and check a full certificate from an existing manual proof:
+
+```bash
+./rustydl-cert from-proof examples/paper/example5.proof --out out/example5.full.json
+./rustydl-cert check out/example5.full.json
+```
+
+Run RustyKeY on a `.key` file and emit a certificate:
+
+```bash
+./rustydl-cert verify examples/binary-search/binary-search.key --emit-cert out/binary.full.json
+```
+
+Compress and check a certificate:
+
+```bash
+./rustydl-cert compress out/example5.full.json --out out/example5.compressed.json
+./rustydl-cert check-compressed out/example5.compressed.json
+```
+
+Convenience Make targets:
+
+```bash
+make verify-cert EXAMPLE=example5
+make verify-cert EXAMPLE=binary_search
+make cert-tests
+make cert-benchmarks
+```
+
+Benchmark results are generated in both CSV and Markdown form:
+
+* `results/cert_benchmark.csv`
+* `results/cert_benchmark.md`
+
+### Supported RustyDL replay subset
+
+The checker currently supports source-level and dynamic-logic proof replay for the
+rule families present in the artifact examples, including assignment/update rules,
+variable substitution, shared and mutable borrowing rules, reference dereference
+and write rules, array/tuple/enum rule names when emitted by RustyKeY,
+loop-invariant rule names, deterministic symbolic simplification, arithmetic
+normalization rules with `polySimp_`/`inEqSimp_` prefixes, and branch closing by
+explicit assumption reference or syntactic closure marker.
+
+### Tests and negative examples
+
+RustyDL-Cert includes positive replay tests, certificate tampering tests, and
+compression tests:
+
+```bash
+python3 -m unittest discover -s tests -p '*tests.py'
+```
+
+Negative tests corrupt rule identifiers, substitutions, side conditions, branch
+closure information, initial sequents, and compressed macro steps to show that the
+checker is not an accept-all validator.
+
+### Documentation
+
+* `docs/certificate_format.md` specifies the full and compressed JSON formats.
+* `docs/theory.md` gives the FM-style replay and compression soundness argument.
+* `docs/artifact_usage.md` provides artifact commands and expected outputs.
+* `IMPLEMENTATION_SUMMARY.md` summarizes modules, supported rules, limitations,
+  tests, benchmarks, and trusted boundaries.
